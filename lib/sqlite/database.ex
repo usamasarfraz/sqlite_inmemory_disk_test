@@ -283,7 +283,7 @@ def handle_cast({:add_record, name, count, target_hour, target_minute}, state) d
       Process.sleep(time_diff)
     # time = "Ali_#{Time.utc_now()}"
     # IO.inspect(time)
-    insert(1,disk_database,name,count)
+    insert(2,disk_database,name,count)
     # insert(2,memory_database,name,count)
   # end)
   # |> Task.await()
