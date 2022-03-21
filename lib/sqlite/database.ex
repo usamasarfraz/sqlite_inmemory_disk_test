@@ -313,11 +313,11 @@ def insert(tb_count, db_id, name, count, prev_tb1_ack, prev_tb2_ack) do
   case Sqlite3.prepare(db_id, "insert into tb1 (firstname, lastname, age, timestemp, ack) values (?1, ?2, ?3, ?4, ?5)") do
   {:ok, statement} ->  insert_into_table(tb_count, statement, name, tb_count, db_id, prev_tb1_ack)
   end
-  tb1_ack = Time.utc_now()
+  tb1_ack = "#{name}_#{Time.utc_now()}"
   # case Sqlite3.prepare(db_id, "insert into tb2 (productcode, name, colour, timestemp, ack) values (?1, ?2, ?3, ?4, ?5)") do
   # {:ok, statement} ->  insert_into_table(tb_count, statement, name, tb_count, db_id, prev_tb2_ack)
   # end
-  tb2_ack = Time.utc_now()
+  tb2_ack = "#{name}_#{Time.utc_now()}"
 
 insert(tb_count - 1, db_id, name, count, tb1_ack, tb2_ack)
 end
@@ -327,18 +327,18 @@ def insert(tb_count, db_id, name,count) do
   case Sqlite3.prepare(db_id, "insert into tb1 (firstname, lastname, age, timestemp, ack) values (?1, ?2, ?3, ?4, ?5)") do
   {:ok, statement} ->  insert_into_table(tb_count, statement, name, tb_count, db_id, "")
   end
-  tb1_ack = Time.utc_now()
+  tb1_ack = "#{name}_#{Time.utc_now()}"
   # case Sqlite3.prepare(db_id, "insert into tb2 (productcode, name, colour, timestemp, ack) values (?1, ?2, ?3, ?4, ?5)") do
   # {:ok, statement} ->  insert_into_table(tb_count, statement, name, tb_count, db_id, "")
   # end
-  tb2_ack = Time.utc_now()
+  tb2_ack = "#{name}_#{Time.utc_now()}"
 insert(tb_count - 1, db_id, name, count, tb1_ack, tb2_ack)
 end
 
 defp insert_into_table(count, _statement,_name,_tb_count,_db_id, _ack) when count < 1, do: :ok
 defp insert_into_table(count, statement, name, tb_count, db_id, ack) do
 # IO.puts("insert#{count}_#{tb_count}_#{name}")
-time = "Ali_#{Time.utc_now()}"
+time = "#{name}_#{Time.utc_now()}"
   IO.inspect(time)
 case Sqlite3.bind(db_id, statement, [count, count, count, time, ack]) do
 :ok -> Sqlite3.step(db_id, statement)
