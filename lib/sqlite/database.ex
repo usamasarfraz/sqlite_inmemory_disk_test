@@ -161,6 +161,15 @@ def init(state) do
   {:ok, %{memory_conn: memory_database.db , disk_conn: disk_database.db}}
 end
 
+def get_report(db_start,db_end,record_start,record_end) do
+  db_start..db_end
+    |> Stream.map(fn counter -> Task.async(fn -> GenServer.call( String.to_atom("user#{counter}"), {:get_report, counter, record_start, record_end})end)end)
+    # [max_concurrency: count, timeout: 30_000]) # Added the timeout here end)
+    # |> Enum.map(fn result -> result end)
+    # |> IO.inspect()
+    |> Enum.map(&Task.await(&1))
+end
+
 def get_from_memory(user) do
   GenServer.call(String.to_atom(user), {:get_record, String.to_atom("memory_conn")})
   :ok
@@ -217,6 +226,7 @@ def create_tables(start_count,end_count) do
     # |> Enum.map(fn result -> result end)
     # |> IO.inspect()
     |> Enum.map(&Task.await(&1))
+    GenServer.call( :report, {:create_report_tb})
 end
 
 def add_column(counter, table_name, column, type) do
@@ -228,13 +238,41 @@ end
 def handle_call({:create_tb, name}, _from, state) do
   # Task.async(fn ->
     disk_database =  Map.fetch!(state, :disk_conn)
-    memory_database =  Map.fetch!(state, :memory_conn)
+    # memory_database =  Map.fetch!(state, :memory_conn)
     Sqlite3.execute(disk_database, "create table tb1 (id integer primary key, firstname text, lastname text, age text, timestemp text, ack text)")
     Sqlite3.execute(disk_database, "create table tb2 (id integer primary key, productcode text, name text, colour text, timestemp text, ack text)")
-    Sqlite3.execute(memory_database, "create table tb1 (id integer primary key, firstname text, lastname text, age text, timestemp text, ack text)")
-    Sqlite3.execute(memory_database, "create table tb2 (id integer primary key, productcode text, name text, colour text, timestemp text, ack text)")
+    # Sqlite3.execute(memory_database, "create table tb1 (id integer primary key, firstname text, lastname text, age text, timestemp text, ack text)")
+    # Sqlite3.execute(memory_database, "create table tb2 (id integer primary key, productcode text, name text, colour text, timestemp text, ack text)")
+    # Sqlite3.execute(memory_database, "create table report (id integer primary key, db_name text, db_name_number integer, first_record_number integer, second_record_number integer, req_timestmp_string text, ack_timestmp_string text, req_timestmp text, ack_timestmp text, net_time_miliseconds integer)")
   # end)
   # |> Task.await()
+  {:reply, state, state}
+end
+
+def handle_call({:create_report_tb}, _from, state) do
+  disk_database =  Map.fetch!(state, :disk_conn)
+  Sqlite3.execute(disk_database, "create table report (id integer primary key, db_name text, db_name_number integer, first_record_number integer, second_record_number integer, req_timestmp_string text, ack_timestmp_string text, req_timestmp text, ack_timestmp text, net_time_miliseconds integer)")
+  {:reply, state, state}
+end
+
+def handle_call({:get_report, counter, rec_start, rec_end}, _from, state) do
+  conn = Map.fetch!(state, String.to_atom("disk_conn"))
+  {:ok, statement} = Exqlite.Sqlite3.prepare(conn, "SELECT id,timestemp,ack FROM tb1 where id between #{rec_start} and #{rec_end}");
+  {:ok, [[id1,timeStamp,_],[id2,_,ack]]} =  Exqlite.Sqlite3.fetch_all(conn,statement)
+
+  {:ok, ack_time_format} = Time.from_iso8601(ack)
+  {:ok, timeStamp_time_format} = Time.from_iso8601(timeStamp)
+  time_diff = Time.diff(ack_time_format, timeStamp_time_format, :millisecond)
+
+  GenServer.call(:report, {:add_report,  "user_#{counter}", counter, id1, id2, "user_#{timeStamp}", "user_#{ack}", timeStamp, ack, time_diff})
+
+
+  {:reply, state, state}
+end
+
+def handle_call({:add_report, db_name, counter, id1, id2, time_string, ack_string, timeStamp, ack, time_diff}, _from, state) do
+  conn = Map.fetch!(state, String.to_atom("disk_conn"))
+  insert_in_report_table(conn, db_name, counter, id1, id2, time_string, ack_string, timeStamp, ack, time_diff)
   {:reply, state, state}
 end
 
@@ -313,11 +351,11 @@ def insert(tb_count, db_id, name, count, prev_tb1_ack, prev_tb2_ack) do
   case Sqlite3.prepare(db_id, "insert into tb1 (firstname, lastname, age, timestemp, ack) values (?1, ?2, ?3, ?4, ?5)") do
   {:ok, statement} ->  insert_into_table(tb_count, statement, name, tb_count, db_id, prev_tb1_ack)
   end
-  tb1_ack = "#{name}_#{Time.utc_now()}"
+  tb1_ack = Time.utc_now()
   # case Sqlite3.prepare(db_id, "insert into tb2 (productcode, name, colour, timestemp, ack) values (?1, ?2, ?3, ?4, ?5)") do
   # {:ok, statement} ->  insert_into_table(tb_count, statement, name, tb_count, db_id, prev_tb2_ack)
   # end
-  tb2_ack = "#{name}_#{Time.utc_now()}"
+  tb2_ack = Time.utc_now()
 
 insert(tb_count - 1, db_id, name, count, tb1_ack, tb2_ack)
 end
@@ -327,18 +365,18 @@ def insert(tb_count, db_id, name,count) do
   case Sqlite3.prepare(db_id, "insert into tb1 (firstname, lastname, age, timestemp, ack) values (?1, ?2, ?3, ?4, ?5)") do
   {:ok, statement} ->  insert_into_table(tb_count, statement, name, tb_count, db_id, "")
   end
-  tb1_ack = "#{name}_#{Time.utc_now()}"
+  tb1_ack = Time.utc_now()
   # case Sqlite3.prepare(db_id, "insert into tb2 (productcode, name, colour, timestemp, ack) values (?1, ?2, ?3, ?4, ?5)") do
   # {:ok, statement} ->  insert_into_table(tb_count, statement, name, tb_count, db_id, "")
   # end
-  tb2_ack = "#{name}_#{Time.utc_now()}"
+  tb2_ack = Time.utc_now()
 insert(tb_count - 1, db_id, name, count, tb1_ack, tb2_ack)
 end
 
 defp insert_into_table(count, _statement,_name,_tb_count,_db_id, _ack) when count < 1, do: :ok
 defp insert_into_table(count, statement, name, tb_count, db_id, ack) do
 # IO.puts("insert#{count}_#{tb_count}_#{name}")
-time = "#{name}_#{Time.utc_now()}"
+time = Time.utc_now()
   IO.inspect(time)
 case Sqlite3.bind(db_id, statement, [count, count, count, time, ack]) do
 :ok -> Sqlite3.step(db_id, statement)
@@ -346,6 +384,15 @@ _ -> IO.puts("somthing is wrong in insert table")
 end
 
 # insert_into_table(count - 1, statement, name, tb_count, db_id, "")
+end
+
+def insert_in_report_table(db_id, db_name, db_name_number, first_record_number, second_record_number, req_timestmp_string, ack_timestmp_string, req_timestmp, ack_timestmp, net_time_miliseconds) do
+  case Sqlite3.prepare(db_id, "insert into report (db_name, db_name_number, first_record_number, second_record_number, req_timestmp_string, ack_timestmp_string, req_timestmp, ack_timestmp, net_time_miliseconds) values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)") do
+    {:ok, statement} ->  case Sqlite3.bind(db_id, statement, [db_name, db_name_number, first_record_number, second_record_number, req_timestmp_string, ack_timestmp_string, req_timestmp, ack_timestmp, net_time_miliseconds]) do
+      :ok -> Sqlite3.step(db_id, statement)
+      _ -> IO.puts("somthing is wrong in insert table")
+      end
+    end
 end
 
 def insert_data_in_memory(db_conn, data_list, tb_name, field1, field2, field3) do

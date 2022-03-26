@@ -23,7 +23,10 @@ defmodule DatabaseSupervisor do
     # end
 
 
-    def db_maker(start_count, end_count) when start_count > end_count, do: IO.puts("Count complete")
+    def db_maker(start_count, end_count) when start_count > end_count do
+      Task.async(fn -> start_child(:report)end)
+      |> Task.await()
+    end
     def db_maker(start_count, end_count) do
       count = end_count -  start_count
     Task.async(fn -> start_child(:"user#{start_count}")end)
