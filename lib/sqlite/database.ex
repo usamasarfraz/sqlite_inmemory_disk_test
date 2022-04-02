@@ -300,17 +300,27 @@ do: {:noreply, state}
 
 
 
-def insert_data(start_count, end_count, target_hour, target_minute) do
+def insert_data(start_count, end_limit, target_hour, target_minute) do
 
-   count = end_count -  start_count
-   start_count..end_count
-    |> Task.async_stream(fn counter -> GenServer.cast( String.to_atom("user#{counter}"), {:add_record, String.to_atom("user#{counter}"), counter, target_hour, target_minute})end,
-    [max_concurrency: count, timeout: 5000000]) # Added the timeout here
-    # end)
-    |> Enum.map(fn ({ :ok, result }) -> result end)
-    # |> Task.await_many()
+  total = end_limit -  start_count
+  insert_loop(start_count,start_count+99,end_limit,total,target_hour,target_minute,1)
+
 end
-def handle_cast({:add_record, name, count, target_hour, target_minute}, state) do
+
+def insert_loop(start_count,_end_count,end_limit,_total,_target_hour,_target_minute,_mili_sec) when start_count > end_limit, do: :ok
+def insert_loop(start_count,end_count,end_limit,total,target_hour,target_minute,mili_sec) do
+  start_count..end_count
+  |> Task.async_stream(fn counter ->
+
+     GenServer.cast( String.to_atom("user#{counter}"), {:add_record, String.to_atom("user#{counter}"), counter, target_hour, target_minute, mili_sec})
+    end,
+  [max_concurrency: total, timeout: 5000000]) # Added the timeout here
+  # end)
+  |> Enum.map(fn ({ :ok, result }) -> result end)
+  insert_loop(end_count+1,end_count+100,end_limit,total,target_hour,target_minute,mili_sec+1)
+end
+
+def handle_cast({:add_record, name, count, target_hour, target_minute, mili_sec}, state) do
     {:ok, target_time} = Time.new(target_hour,target_minute,10,307000)
 
     # Task.async(fn ->
@@ -318,7 +328,9 @@ def handle_cast({:add_record, name, count, target_hour, target_minute}, state) d
       # memory_database = Map.fetch!(state, :memory_conn)
       current_time = Time.utc_now()
       time_diff = Time.diff(target_time, current_time, :millisecond)
-      Process.sleep(time_diff)
+      time_till_sleep = time_diff+mili_sec
+      IO.inspect(time_till_sleep)
+      Process.sleep(time_till_sleep)
     # time = "Ali_#{Time.utc_now()}"
     # IO.inspect(time)
     insert(2,disk_database,name,count)
