@@ -329,7 +329,7 @@ def handle_cast({:add_record, name, count, target_hour, target_minute, mili_sec}
       current_time = Time.utc_now()
       time_diff = Time.diff(target_time, current_time, :millisecond)
       time_till_sleep = time_diff+mili_sec
-      IO.inspect(time_till_sleep)
+      # IO.inspect(time_till_sleep)
       Process.sleep(time_till_sleep)
     # time = "Ali_#{Time.utc_now()}"
     # IO.inspect(time)
